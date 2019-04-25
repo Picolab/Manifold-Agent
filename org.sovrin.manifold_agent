@@ -27,7 +27,16 @@ ruleset org.sovrin.manifold_agent {
                             //"iconURL": "https://static1.squarespace.com/static/593df14037c58172ed4d5ac9/593df1f303596e06e98edd75/5945989cccf210058d2d32e7/1498009710416/helloworld.png?format=1000w",
                             "bindings" : {}
                           } );
-    
+  }
+  
+  rule initialize {
+    select when wrangler ruleset_added where rids >< meta:rid
+    always {
+      raise wrangler event "install_rulesets_requested"
+        attributes {
+          "rids": ["html","org.sovrin.agent","org.sovrin.agent.ui","org.sovrin.agent_message"]
+        }
+    }
   }
 
   rule connection_image {
