@@ -55,7 +55,7 @@ ruleset org.sovrin.manifold_agent {
       raise sovrin event "trust_ping_requested"
         attributes event:attrs;
 
-      schedule sovrin event "no_response" at time:add(time:now(), {"seconds":5})
+      schedule sovrin event "no_response" at time:add(time:now(), {"seconds":3})
         attributes event:attrs
     }
   }
@@ -70,12 +70,19 @@ ruleset org.sovrin.manifold_agent {
       my_did = head{"my_did"}
       their_did = head{"their_did"}
 
-      their_host = ledger:read_ledger(their).klog("host")
+      their_host = ledger:read_ledger(their_did).klog("host")
+      error_message = "Unable to reach agent at " + their_host
     }
 
-    always {
+    if event:attr("isDoubleCheck").defaultsTo(false) then
+    send_directive("sovrin_no_response", {"status": "Bad Connection", "message": error_message})
+
+    notfired {
       raise sovrin event "update_endpoint"
-        attributes {"my_did": my_did, "their_host": their_host}
+        attributes {"my_did": my_did, "their_host": their_host};
+
+      raise sovrin event "check_connection"
+        attributes {"their_vk": event:attr("their_vk"), "content": event:attr("content"), "isDoubleCheck": true}
     }
   }
 
