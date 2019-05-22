@@ -87,7 +87,7 @@ ruleset org.sovrin.manifold_agent {
     always {
       raise wrangler event "install_rulesets_requested"
         attributes {
-          "rids": ["html","org.sovrin.agent","org.sovrin.agent.ui","org.sovrin.agent_message"]
+          "rids": ["org.sovrin.agent", "io.picolabs.pico_ledger"]
         }
     }
   }
