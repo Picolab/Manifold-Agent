@@ -2,13 +2,14 @@ ruleset org.sovrin.manifold_agent {
   meta {
     use module org.sovrin.agent alias agent
     use module io.picolabs.pico_ledger alias ledger
-    shares __testing, lastMessageStatus, pingStatus
+    shares __testing, lastMessageStatus, pingStatus, getMSGs, removeMSG, retrieveMSGs
   }
   global {
     __testing = { "queries":
       [ { "name": "__testing" }
       , { "name": "lastMessageStatus" }
-      , { "name": "pingStatus" }
+      , { "name": "pingStatus" }, {"name": "getMSGs", "args": ["their_vk"]}, {"name": "removeMSG", "args": ["their_vk", "sent_time"]}
+      , {"name": "retrieveMSGs", "args": ["their_vk"]}
       //, { "name": "entry", "args": [ "key" ] }
       ] , "events":
       [ { "domain": "sovrin", "type": "check_connection", "attrs": ["their_vk", "content"] }
@@ -27,7 +28,48 @@ ruleset org.sovrin.manifold_agent {
     pingStatus = function() {
       ent:ping_status
     }
+    
+    getLastMSG = function(their_vk, messages) {
+      messages.klog("messages");
+      outgoing_msgs = messages.filter(function(x) {
+        x{"from"} == "outgoing"
+      });
+      outgoing_msgs.klog("outgoing");
+      failed_msg = outgoing_msgs[outgoing_msgs.length()-1]{"sent_time"}.klog("failed_msg");
+      failed_msgs = ent:failed_messages;
+      failed_msgs[their_vk] == null => {}.put(their_vk, [failed_msg]) |failed_msgs.set([their_vk], ent:failed_messages[their_vk].append(failed_msg)).klog("failed_messages");
+    }
+    
+    getMSGs = function(their_vk) {
+        connections = agent:ui().klog("ui"){"connections"};
+        connections.klog("conns");
+        array = connections.filter(function(x){
+          x{"their_vk"}.klog("x{their_vk}") == their_vk.klog("their_vk");
+        });
+        array[0]{"messages"};
   }
+  
+  removeMSG = function(their_vk, sent_time) {
+    failed_msgs = ent:failed_messages;
+    failed_msgs.set([their_vk], ent:failed_messages{their_vk}.filter(function(x){
+      x != sent_time
+    }))
+  }
+  
+  addReSentMSG = function(their_vk, sent_time) {
+    reSentMessages = ent:re_sent_messages;
+    reSentMessages.set([their_vk], reSentMessages{their_vk}.append(sent_time))
+  }
+  
+  retrieveMSGs = function(their_vk) {
+    messages = getMSGs(their_vk);
+    failed_messages = ent:failed_messages{their_vk}.klog("failed_messages");
+    edited_messages = messages.reduce(function(a,b){
+      (failed_messages.has(b{"sent_time"})) => a.append(b.set(["failed"], true)) | (ent:re_sent_messages{their_vk}.has(b{"sent_time"})) => a | a.append(b)
+    },[]);
+    edited_messages;
+  }
+}
 
   rule discovery {
     select when manifold apps
@@ -74,6 +116,7 @@ ruleset org.sovrin.manifold_agent {
   rule handle_no_response {
     select when sovrin no_response
     pre {
+      ping_type = (event:attr("content") == null || event:attr("content") == "") => "ping" | "message"
       head = agent:connections().filter(function(v,k) {
         v{"their_vk"} == event:attr("their_vk")
       }).values().head()
@@ -84,20 +127,29 @@ ruleset org.sovrin.manifold_agent {
       their_host = ledger:read_ledger(their_did).klog("host")
       error_message = "Unable to reach agent at " + their_host
     }
-
     if event:attr("isDoubleCheck").defaultsTo(false) then
     send_directive("ping", {"status": "Bad Connection", "message": error_message})
 
     fired{
       ent:last_message := ent:last_message.set(["status"], "failed");
-      ent:ping_status := "disconnected"
+      ent:ping_status := "disconnected";
+      raise sovrin event "send_basicmessage"
+        attributes event:attrs
+        if ping_type.klog("ping_type") == "message";
+      raise sovrin event "store_failed_message"
+        attributes event:attrs
+        if ping_type == "message";
+      ent:failed_messages := removeMSG(event:attr("their_vk"), event:attr("sent_time"))
+         if event:attr("sent_time") != null;
+      ent:re_sent_messages := addReSentMSG(event:attr("their_vk"), event:attr("sent_time"))
+        if  event:attr("sent_time") != null;
     }
     else {
       raise sovrin event "update_endpoint"
         attributes {"my_did": my_did, "their_host": their_host};
 
       raise sovrin event "check_connection"
-        attributes {"their_vk": event:attr("their_vk"), "content": event:attr("content"), "isDoubleCheck": true}
+        attributes {"their_vk": event:attr("their_vk"), "content": event:attr("content"), "isDoubleCheck": true, "sent_time": event:attr("sent_time")}
     }
   }
 
@@ -123,7 +175,11 @@ ruleset org.sovrin.manifold_agent {
         if ping_type == "message";
       ent:last_message := ent:last_message.set(["status"], "sent")
         if ping_type == "message";
-      ent:ping_status := "connected"
+      ent:ping_status := "connected";
+      ent:failed_messages := removeMSG(message_attrs{"their_vk"}, message_attrs{"sent_time"})
+         if message_attrs{"sent_time"} != null;
+      ent:re_sent_messages := addReSentMSG(message_attrs{"their_vk"}, message_attrs{"sent_time"})
+        if message_attrs{"sent_time"} != null;
     }
   }
 
@@ -151,4 +207,16 @@ ruleset org.sovrin.manifold_agent {
       raise agent event "update_conns"
     }
   }
+  
+  rule store_failed_message {
+    select when sovrin store_failed_message
+    pre {
+      messages = getMSGs(event:attr("their_vk"));
+    }
+    always {
+      ent:failed_messages := getLastMSG(event:attr("their_vk"), messages);
+      ent:re_sent_messages := (ent:re_sent_messages == null) => {}.put(event:attr("their_vk"), []) | (ent:re_sent_messages{event:attr("their_vk")} == null) => ent:re_sent_messages.put(event:attr("their_vk"), [])  | ent:re_sent_messages
+    }
+  }
+  
 }
