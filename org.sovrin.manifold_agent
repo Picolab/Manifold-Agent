@@ -263,7 +263,7 @@ ruleset org.sovrin.manifold_agent {
       state = {"agent": agent:connections(){their_key}{"their_did"}}.put("tab", "2");
     }
     if not (ent:current_page{"chat"} == their_key) then
-      event:send({"eci":manifold_pico, "domain":"manifold", "type":"add_notification", "attrs":{"did": id, "thing":thing, "app":"Sovrin Agent", "message":"You got a message from "+conn{"label"}, "ruleset":"org.sovrin.manifold_agent", "state": state}})
+      event:send({"eci":manifold_pico, "domain":"manifold", "type":"add_notification", "attrs":{"picoId": id, "thing":thing, "app":"Sovrin Agent", "message":"You got a message from "+conn{"label"}, "ruleset":"org.sovrin.manifold_agent", "state": state}})
     always {
     }
   }
