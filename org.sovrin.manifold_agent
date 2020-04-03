@@ -32,11 +32,9 @@ ruleset org.sovrin.manifold_agent {
     }
     
     getLastMSG = function(their_vk, messages) {
-      messages.klog("messages");
       outgoing_msgs = messages.filter(function(x) {
         x{"from"} == "outgoing"
       });
-      outgoing_msgs.klog("outgoing");
       failed_msg = outgoing_msgs[outgoing_msgs.length()-1]{"sent_time"}.klog("failed_msg");
       failed_msgs = ent:failed_messages;
       (failed_msgs == null) => {}.put(their_vk, [failed_msg]) | (failed_msgs[their_vk] == null) => failed_msgs.put(their_vk, [failed_msg]) | failed_msgs.set([their_vk], ent:failed_messages[their_vk].append(failed_msg)).klog("failed_messages");
@@ -44,7 +42,6 @@ ruleset org.sovrin.manifold_agent {
     
     getMSGs = function(their_vk) {
         connections = agent:ui().klog("ui"){"connections"};
-        connections.klog("conns");
         array = connections.filter(function(x){
           x{"their_vk"}.klog("x{their_vk}") == their_vk.klog("their_vk");
         });
