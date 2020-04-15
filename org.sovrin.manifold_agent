@@ -169,7 +169,8 @@ ruleset org.sovrin.manifold_agent {
     }
     else {
       raise sovrin event "update_endpoint"
-        attributes {"my_did": my_did, "their_host": their_host};
+        attributes {"my_did": my_did, "their_host": their_host}
+      if not their_host.isnull();
 
       raise sovrin event "check_connection"
         attributes {"their_vk": event:attr("their_vk"), "content": event:attr("content"), "isDoubleCheck": true, "sent_time": event:attr("sent_time")}
@@ -219,6 +220,7 @@ ruleset org.sovrin.manifold_agent {
     always {
       raise sovrin event "update_endpoint"
         attributes {"my_did": my_did, "their_host": their_host}
+      if not their_host.isnull();
     }
   }
 
